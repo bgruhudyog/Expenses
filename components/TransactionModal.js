@@ -39,6 +39,25 @@ export default function TransactionModal({
       return;
     }
 
+    // Try to determine if the creditType column exists
+    let includesCreditType = true;
+    
+    try {
+      // Check if the table has the creditType column
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .limit(1);
+      
+      if (error) {
+        console.error('Error checking schema:', error);
+        includesCreditType = false;
+      }
+    } catch (error) {
+      console.error('Error checking schema:', error);
+      includesCreditType = false;
+    }
+
     const newTransaction = {
       amount: parseFloat(amount),
       description,
@@ -54,7 +73,12 @@ export default function TransactionModal({
 
     // If credit, adjust based on given/taken
     if (type === 'credit') {
-      newTransaction.creditType = creditType;
+      if (includesCreditType) {
+        newTransaction.creditType = creditType;
+      } else {
+        // If creditType column doesn't exist, include it in description as a workaround
+        newTransaction.description = `[${creditType.toUpperCase()}] ${description}`;
+      }
     }
 
     try {

@@ -12,13 +12,24 @@ const Credit: NextPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState('all');
   const [showSnackbar, setShowSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
   const [totalGiven, setTotalGiven] = useState(0);
   const [totalTaken, setTotalTaken] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
 
   useEffect(() => {
     fetchCreditTransactions();
     fetchCategories();
   }, []);
+  
+  const showMessage = (message) => {
+    setSnackbarMessage(message);
+    setShowSnackbar(true);
+    setTimeout(() => {
+      setShowSnackbar(false);
+    }, 3000);
+  };
 
   const fetchCreditTransactions = async () => {
     try {
@@ -96,9 +107,58 @@ const Credit: NextPage = () => {
     }
   };
 
-  const filteredTransactions = filter === 'all' 
-    ? transactions 
-    : transactions.filter(t => t.creditType === filter);
+  const handleDeleteTransaction = async (transaction) => {
+    if (!confirm('Are you sure you want to delete this transaction?')) {
+      return;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', transaction.id);
+        
+      if (error) throw error;
+      
+      // Update transactions list
+      const updatedTransactions = transactions.filter(t => t.id !== transaction.id);
+      setTransactions(updatedTransactions);
+      calculateTotals(updatedTransactions);
+      
+      // Show success message
+      showMessage('Credit transaction deleted successfully');
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      alert('Failed to delete transaction');
+    }
+  };
+  
+  // Apply filters
+  let filteredTransactions = transactions;
+  
+  // Credit type filter (given/taken)
+  if (filter !== 'all') {
+    filteredTransactions = filteredTransactions.filter(t => t.creditType === filter);
+  }
+  
+  // Search filter
+  if (searchTerm) {
+    filteredTransactions = filteredTransactions.filter(t => 
+      t.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }
+  
+  // Month filter
+  if (monthFilter) {
+    filteredTransactions = filteredTransactions.filter(t => {
+      const transactionDate = new Date(t.date);
+      const [year, month] = monthFilter.split('-');
+      return (
+        transactionDate.getFullYear() === parseInt(year) && 
+        transactionDate.getMonth() === parseInt(month) - 1
+      );
+    });
+  }
 
   return (
     <div>
@@ -113,6 +173,23 @@ const Credit: NextPage = () => {
           <h3>You Received</h3>
           <p className="amount">₹{totalTaken.toLocaleString()}</p>
         </div>
+      </div>
+      
+      <div className="search-filter">
+        <input
+          type="text"
+          placeholder="Search credits..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
+        
+        <input
+          type="month"
+          value={monthFilter}
+          onChange={(e) => setMonthFilter(e.target.value)}
+          className="month-input"
+        />
       </div>
       
       <div className="filters">
@@ -145,8 +222,19 @@ const Credit: NextPage = () => {
                   <h3 className="credit-description">{transaction.description}</h3>
                   <span className="credit-date">{format(new Date(transaction.date), 'dd MMM yyyy')}</span>
                 </div>
-                <div className={`credit-amount ${transaction.creditType === 'given' ? 'given' : 'taken'}`}>
-                  ₹{transaction.amount.toLocaleString()}
+                <div className="credit-right">
+                  <div className={`credit-amount ${transaction.creditType === 'given' ? 'given' : 'taken'}`}>
+                    ₹{transaction.amount.toLocaleString()}
+                  </div>
+                  <button 
+                    className="delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteTransaction(transaction);
+                    }}
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
               
@@ -190,11 +278,24 @@ const Credit: NextPage = () => {
       
       {showSnackbar && (
         <div className="snackbar">
-          Credit transaction added successfully
+          {snackbarMessage || 'Credit transaction added successfully'}
         </div>
       )}
 
       <style jsx>{`
+        .search-filter {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 16px;
+        }
+        .search-input, .month-input {
+          flex: 1;
+          padding: 10px 12px;
+          border-radius: 8px;
+          border: 1px solid var(--divider);
+          background-color: var(--paper-bg);
+          color: white;
+        }
         .summaries {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
@@ -263,6 +364,21 @@ const Credit: NextPage = () => {
         }
         .credit-amount.taken {
           color: var(--success);
+        }
+        .credit-right {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 8px;
+        }
+        .delete-btn {
+          background-color: #ef4444;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          padding: 4px 8px;
+          font-size: 0.7rem;
+          cursor: pointer;
         }
         .credit-details {
           display: grid;

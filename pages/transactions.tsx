@@ -12,6 +12,9 @@ const Transactions: NextPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState('all');
   const [showSnackbar, setShowSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
 
   useEffect(() => {
     fetchTransactions();
@@ -31,6 +34,14 @@ const Transactions: NextPage = () => {
     } catch (error) {
       console.error('Error fetching transactions:', error);
     }
+  };
+
+  const showMessage = (message) => {
+    setSnackbarMessage(message);
+    setShowSnackbar(true);
+    setTimeout(() => {
+      setShowSnackbar(false);
+    }, 3000);
   };
 
   const fetchCategories = async () => {
@@ -69,9 +80,56 @@ const Transactions: NextPage = () => {
     }
   };
 
-  const filteredTransactions = filter === 'all' 
-    ? transactions 
-    : transactions.filter(t => t.type === filter);
+  const handleDeleteTransaction = async (transaction) => {
+    if (!confirm('Are you sure you want to delete this transaction?')) {
+      return;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', transaction.id);
+        
+      if (error) throw error;
+      
+      // Update transactions list
+      setTransactions(transactions.filter(t => t.id !== transaction.id));
+      
+      // Show success message
+      showMessage('Transaction deleted successfully');
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      alert('Failed to delete transaction');
+    }
+  };
+
+  // Apply filters
+  let filteredTransactions = transactions;
+  
+  // Type filter (expense, income, etc)
+  if (filter !== 'all') {
+    filteredTransactions = filteredTransactions.filter(t => t.type === filter);
+  }
+  
+  // Search filter
+  if (searchTerm) {
+    filteredTransactions = filteredTransactions.filter(t => 
+      t.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }
+  
+  // Month filter
+  if (monthFilter) {
+    filteredTransactions = filteredTransactions.filter(t => {
+      const transactionDate = new Date(t.date);
+      const [year, month] = monthFilter.split('-');
+      return (
+        transactionDate.getFullYear() === parseInt(year) && 
+        transactionDate.getMonth() === parseInt(month) - 1
+      );
+    });
+  }
 
   const getCategoryName = (categoryId) => {
     const category = categories.find(c => c.id === categoryId);
@@ -81,6 +139,23 @@ const Transactions: NextPage = () => {
   return (
     <div>
       <h1>Transactions</h1>
+      
+      <div className="search-filter">
+        <input
+          type="text"
+          placeholder="Search transactions..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
+        
+        <input
+          type="month"
+          value={monthFilter}
+          onChange={(e) => setMonthFilter(e.target.value)}
+          className="month-input"
+        />
+      </div>
       
       <div className="filters">
         <div 
@@ -101,6 +176,12 @@ const Transactions: NextPage = () => {
         >
           Income
         </div>
+        <div 
+          className={`filter-item ${filter === 'credit' ? 'active' : ''}`}
+          onClick={() => setFilter('credit')}
+        >
+          Credit
+        </div>
       </div>
       
       <div className="transactions-list">
@@ -112,8 +193,19 @@ const Transactions: NextPage = () => {
                   <h3 className="transaction-description">{transaction.description}</h3>
                   <span className="transaction-date">{format(new Date(transaction.date), 'dd MMM yyyy')}</span>
                 </div>
-                <div className={`transaction-amount ${transaction.type === 'expense' ? 'expense' : 'income'}`}>
-                  {transaction.type === 'expense' ? '-' : '+'}₹{transaction.amount.toLocaleString()}
+                <div className="transaction-right">
+                  <div className={`transaction-amount ${transaction.type === 'expense' ? 'expense' : (transaction.type === 'income' ? 'income' : 'credit')}`}>
+                    {transaction.type === 'expense' ? '-' : '+'}₹{transaction.amount.toLocaleString()}
+                  </div>
+                  <button 
+                    className="delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteTransaction(transaction);
+                    }}
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
               
@@ -165,11 +257,24 @@ const Transactions: NextPage = () => {
       
       {showSnackbar && (
         <div className="snackbar">
-          Transaction created successfully
+          {snackbarMessage || 'Transaction created successfully'}
         </div>
       )}
 
       <style jsx>{`
+        .search-filter {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 16px;
+        }
+        .search-input, .month-input {
+          flex: 1;
+          padding: 10px 12px;
+          border-radius: 8px;
+          border: 1px solid var(--divider);
+          background-color: var(--paper-bg);
+          color: white;
+        }
         .filters {
           display: flex;
           margin-bottom: 16px;
@@ -218,6 +323,24 @@ const Transactions: NextPage = () => {
         }
         .transaction-amount.income {
           color: var(--success);
+        }
+        .transaction-amount.credit {
+          color: var(--accent);
+        }
+        .transaction-right {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 8px;
+        }
+        .delete-btn {
+          background-color: #ef4444;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          padding: 4px 8px;
+          font-size: 0.7rem;
+          cursor: pointer;
         }
         .transaction-details {
           display: grid;
