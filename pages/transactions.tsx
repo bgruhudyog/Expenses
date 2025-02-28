@@ -233,7 +233,7 @@ const Transactions: NextPage = () => {
                 {transaction.type === 'credit' && (
                   <div className="detail-item">
                     <span className="detail-label">Credit Type:</span>
-                    <span className="detail-value">{transaction.creditType.charAt(0).toUpperCase() + transaction.creditType.slice(1)}</span>
+                    <span className="detail-value">{transaction.creditType ? 'Given' : 'Taken'}</span>
                   </div>
                 )}
               </div>

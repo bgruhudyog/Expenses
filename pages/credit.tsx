@@ -17,6 +17,8 @@ const Credit: NextPage = () => {
   const [totalTaken, setTotalTaken] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
+  const [partialSettlementId, setPartialSettlementId] = useState(null);
+  const [partialAmount, setPartialAmount] = useState('');
 
   useEffect(() => {
     fetchCreditTransactions();
@@ -67,12 +69,15 @@ const Credit: NextPage = () => {
     let taken = 0;
 
     transactionList.forEach(transaction => {
-      const amount = parseFloat(transaction.amount);
-      
-      if (transaction.creditType === 'given') {
-        given += amount;
-      } else { // taken
-        taken += amount;
+      if (!transaction.isSettled) {
+        const amount = parseFloat(transaction.amount);
+        const remainingAmount = amount - (transaction.settledAmount || 0);
+        
+        if (transaction.creditType === true) {
+          given += remainingAmount;
+        } else { // taken (false)
+          taken += remainingAmount;
+        }
       }
     });
 
@@ -132,13 +137,82 @@ const Credit: NextPage = () => {
       alert('Failed to delete transaction');
     }
   };
+
+  const handleSettlement = async (transaction, isFullSettlement, settleAmount) => {
+    if (!settleAmount || settleAmount <= 0) {
+      alert('Please enter a valid settlement amount');
+      return;
+    }
+
+    // Check if the amount exceeds the remaining balance
+    const remainingAmount = transaction.amount - (transaction.settledAmount || 0);
+    if (settleAmount > remainingAmount) {
+      alert(`The settlement amount cannot exceed the remaining balance: ₹${remainingAmount}`);
+      return;
+    }
+
+    try {
+      // Create a mirror transaction to adjust the balance
+      const newTransaction = {
+        date: new Date().toISOString(),
+        walletType: transaction.walletType,
+        categoryId: transaction.categoryId,
+        amount: parseFloat(settleAmount),
+        description: transaction.creditType 
+          ? `Received from: ${transaction.description}` 
+          : `Paid to: ${transaction.description}`
+      };
+
+      // Adjust balances based on credit type
+      if (transaction.creditType) {  // Credit given (true)
+        newTransaction.type = 'income'; // Money coming back
+      } else {  // Credit taken (false)
+        newTransaction.type = 'expense'; // Money going out
+      }
+
+      // Create the mirror transaction
+      const { error: insertError } = await supabase
+        .from('transactions')
+        .insert([newTransaction]);
+        
+      if (insertError) throw insertError;
+
+      // Update the original credit transaction with settlement details
+      const updatedTransaction = {
+        settledAmount: (transaction.settledAmount || 0) + parseFloat(settleAmount),
+        isSettled: isFullSettlement || ((transaction.settledAmount || 0) + parseFloat(settleAmount) >= transaction.amount)
+      };
+
+      const { error: updateError } = await supabase
+        .from('transactions')
+        .update(updatedTransaction)
+        .eq('id', transaction.id);
+        
+      if (updateError) throw updateError;
+      
+      // Refresh transactions data
+      fetchCreditTransactions();
+      setPartialSettlementId(null);
+      setPartialAmount('');
+      
+      // Show success message
+      showMessage(isFullSettlement 
+        ? 'Credit fully settled successfully' 
+        : 'Credit partially settled successfully');
+    } catch (error) {
+      console.error('Error settling transaction:', error);
+      alert('Failed to settle transaction');
+    }
+  };
   
   // Apply filters
   let filteredTransactions = transactions;
   
   // Credit type filter (given/taken)
   if (filter !== 'all') {
-    filteredTransactions = filteredTransactions.filter(t => t.creditType === filter);
+    filteredTransactions = filteredTransactions.filter(t => 
+      filter === 'given' ? t.creditType === true : t.creditType === false
+    );
   }
   
   // Search filter
@@ -216,15 +290,19 @@ const Credit: NextPage = () => {
       <div className="credit-list">
         {filteredTransactions.length > 0 ? (
           filteredTransactions.map((transaction) => (
-            <div key={transaction.id} className="card credit-card">
+            <div key={transaction.id} className={`card credit-card ${transaction.isSettled ? 'settled' : ''}`}>
               <div className="credit-header">
                 <div>
-                  <h3 className="credit-description">{transaction.description}</h3>
+                  <h3 className={`credit-description ${transaction.isSettled ? 'strikethrough' : ''}`}>
+                    {transaction.description}
+                  </h3>
                   <span className="credit-date">{format(new Date(transaction.date), 'dd MMM yyyy')}</span>
                 </div>
                 <div className="credit-right">
-                  <div className={`credit-amount ${transaction.creditType === 'given' ? 'given' : 'taken'}`}>
-                    ₹{transaction.amount.toLocaleString()}
+                  <div className={`credit-amount ${transaction.creditType ? 'given' : 'taken'}`}>
+                    ₹{(transaction.isSettled 
+                      ? transaction.amount 
+                      : (transaction.amount - (transaction.settledAmount || 0))).toLocaleString()}
                   </div>
                   <button 
                     className="delete-btn"
@@ -241,7 +319,7 @@ const Credit: NextPage = () => {
               <div className="credit-details">
                 <div className="detail-item">
                   <span className="detail-label">Type:</span>
-                  <span className="detail-value">{transaction.creditType === 'given' ? 'Given' : 'Received'}</span>
+                  <span className="detail-value">{transaction.creditType ? 'Given' : 'Taken'}</span>
                 </div>
                 <div className="detail-item">
                   <span className="detail-label">Wallet:</span>
@@ -251,13 +329,78 @@ const Credit: NextPage = () => {
                   <span className="detail-label">Status:</span>
                   <span className="detail-value">{transaction.isSettled ? 'Settled' : 'Pending'}</span>
                 </div>
-                {transaction.isSettled && (
+                {transaction.settledAmount > 0 && !transaction.isSettled && (
                   <div className="detail-item">
-                    <span className="detail-label">Settled Amount:</span>
+                    <span className="detail-label">Partially Settled:</span>
                     <span className="detail-value">₹{transaction.settledAmount.toLocaleString()}</span>
                   </div>
                 )}
               </div>
+              
+              {!transaction.isSettled && (
+                <div className="settlement-options">
+                  {transaction.creditType ? (
+                    <>
+                      <button 
+                        className="btn-settlement"
+                        onClick={() => handleSettlement(transaction, true, transaction.amount)}
+                      >
+                        Received in Full
+                      </button>
+                      <button 
+                        className="btn-settlement"
+                        onClick={() => setPartialSettlementId(transaction.id)}
+                      >
+                        Received Partially
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button 
+                        className="btn-settlement"
+                        onClick={() => handleSettlement(transaction, true, transaction.amount)}
+                      >
+                        Paid in Full
+                      </button>
+                      <button 
+                        className="btn-settlement"
+                        onClick={() => setPartialSettlementId(transaction.id)}
+                      >
+                        Paid Partially
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              
+              {partialSettlementId === transaction.id && (
+                <div className="partial-settlement">
+                  <input
+                    type="number"
+                    placeholder="Enter amount"
+                    value={partialAmount}
+                    onChange={(e) => setPartialAmount(e.target.value)}
+                    className="form-input"
+                  />
+                  <div className="settlement-actions">
+                    <button 
+                      className="btn-primary"
+                      onClick={() => handleSettlement(transaction, false, parseFloat(partialAmount))}
+                    >
+                      Submit
+                    </button>
+                    <button 
+                      className="btn-secondary"
+                      onClick={() => {
+                        setPartialSettlementId(null);
+                        setPartialAmount('');
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))
         ) : (

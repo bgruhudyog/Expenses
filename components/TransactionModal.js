@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import supabase from '../lib/supabase';
 
@@ -11,51 +10,32 @@ export default function TransactionModal({
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('expense');
-  const [walletType, setWalletType] = useState('cash');
+  const [walletType, setWalletType] = useState('digital'); // Default to digital
   const [categoryId, setCategoryId] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringInterval, setRecurringInterval] = useState('');
-  const [creditType, setCreditType] = useState('given');
-  
+  const [creditType, setCreditType] = useState(true); // Default to given (true)
+
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
       setAmount('');
       setDescription('');
       setType('expense');
-      setWalletType('cash');
+      setWalletType('digital'); // Default to digital
       setCategoryId('');
       setIsRecurring(false);
       setRecurringInterval('');
-      setCreditType('given');
+      setCreditType(true); // Default to given (true)
     }
   }, [isOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!amount || !description) {
       alert('Please fill all required fields');
       return;
-    }
-
-    // Try to determine if the creditType column exists
-    let includesCreditType = true;
-    
-    try {
-      // Check if the table has the creditType column
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .limit(1);
-      
-      if (error) {
-        console.error('Error checking schema:', error);
-        includesCreditType = false;
-      }
-    } catch (error) {
-      console.error('Error checking schema:', error);
-      includesCreditType = false;
     }
 
     const newTransaction = {
@@ -71,14 +51,9 @@ export default function TransactionModal({
       settledAmount: 0
     };
 
-    // If credit, adjust based on given/taken
+    // Only add creditType if the transaction type is credit
     if (type === 'credit') {
-      if (includesCreditType) {
-        newTransaction.creditType = creditType;
-      } else {
-        // If creditType column doesn't exist, include it in description as a workaround
-        newTransaction.description = `[${creditType.toUpperCase()}] ${description}`;
-      }
+      newTransaction.creditType = creditType; // true for given, false for taken
     }
 
     try {
@@ -96,7 +71,7 @@ export default function TransactionModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <h2>Add Transaction</h2>
-        
+
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label">Transaction Type</label>
@@ -121,45 +96,37 @@ export default function TransactionModal({
               </div>
             </div>
           </div>
-          
+
           {type === 'credit' && (
             <div className="form-group">
               <label className="form-label">Credit Type</label>
-              <div className="toggle-group">
+              <div className="switch-toggle">
+                <span className={creditType ? 'active' : ''}>Given</span>
                 <div 
-                  className={`toggle-item ${creditType === 'given' ? 'active' : ''}`}
-                  onClick={() => setCreditType('given')}
+                  className={`toggle-switch ${!creditType ? 'switched' : ''}`}
+                  onClick={() => setCreditType(!creditType)}
                 >
-                  Given
+                  <div className="toggle-knob"></div>
                 </div>
-                <div 
-                  className={`toggle-item ${creditType === 'taken' ? 'active' : ''}`}
-                  onClick={() => setCreditType('taken')}
-                >
-                  Taken
-                </div>
+                <span className={!creditType ? 'active' : ''}>Taken</span>
               </div>
             </div>
           )}
-          
+
           <div className="form-group">
             <label className="form-label">Wallet Type</label>
-            <div className="toggle-group">
+            <div className="switch-toggle">
+              <span className={walletType === 'digital' ? 'active' : ''}>Digital</span>
               <div 
-                className={`toggle-item ${walletType === 'cash' ? 'active' : ''}`}
-                onClick={() => setWalletType('cash')}
+                className={`toggle-switch ${walletType === 'cash' ? 'switched' : ''}`}
+                onClick={() => setWalletType(walletType === 'digital' ? 'cash' : 'digital')}
               >
-                Cash
+                <div className="toggle-knob"></div>
               </div>
-              <div 
-                className={`toggle-item ${walletType === 'digital' ? 'active' : ''}`}
-                onClick={() => setWalletType('digital')}
-              >
-                Digital
-              </div>
+              <span className={walletType === 'cash' ? 'active' : ''}>Cash</span>
             </div>
           </div>
-          
+
           <div className="form-group">
             <label className="form-label" htmlFor="amount">Amount (₹)</label>
             <input 
@@ -172,7 +139,7 @@ export default function TransactionModal({
               required
             />
           </div>
-          
+
           <div className="form-group">
             <label className="form-label" htmlFor="description">Description</label>
             <input 
@@ -185,7 +152,7 @@ export default function TransactionModal({
               required
             />
           </div>
-          
+
           <div className="form-group">
             <label className="form-label" htmlFor="category">Category</label>
             <select 
@@ -202,7 +169,7 @@ export default function TransactionModal({
               ))}
             </select>
           </div>
-          
+
           <div className="form-group checkbox-group">
             <input 
               type="checkbox" 
@@ -212,7 +179,7 @@ export default function TransactionModal({
             />
             <label htmlFor="isRecurring">Recurring Payment</label>
           </div>
-          
+
           {isRecurring && (
             <div className="form-group">
               <label className="form-label" htmlFor="recurringInterval">Interval</label>
@@ -231,7 +198,7 @@ export default function TransactionModal({
               </select>
             </div>
           )}
-          
+
           <div className="form-buttons">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancel
@@ -255,6 +222,46 @@ export default function TransactionModal({
           align-items: center;
           gap: 8px;
         }
+        .switch-toggle {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          border: 1px solid #ccc;
+          padding: 6px 12px;
+          border-radius: 4px;
+        }
+        .switch-toggle .toggle-switch {
+          width: 40px;
+          height: 20px;
+          background-color: #ccc;
+          border-radius: 10px;
+          position: relative;
+          cursor: pointer;
+          transition: background-color 0.3s;
+        }
+        .switch-toggle .toggle-switch.switched {
+          background-color: #4CAF50;
+        }
+        .switch-toggle .toggle-knob {
+          width: 16px;
+          height: 16px;
+          background-color: white;
+          border-radius: 50%;
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          transition: left 0.3s;
+        }
+        .switch-toggle .toggle-switch.switched .toggle-knob {
+          left: 22px;
+        }
+        .switch-toggle span {
+          cursor: pointer;
+        }
+        .switch-toggle span.active {
+          font-weight: bold;
+        }
+
         h2 {
           margin-top: 0;
           margin-bottom: 24px;

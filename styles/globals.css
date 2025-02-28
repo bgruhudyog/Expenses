@@ -1,4 +1,3 @@
-
 html,
 body {
   padding: 0;
@@ -46,17 +45,56 @@ a {
 
 .snackbar {
   position: fixed;
-  bottom: 20px;
+  bottom: 80px;
   left: 50%;
   transform: translateX(-50%);
   background-color: var(--success);
   color: white;
   padding: 12px 24px;
-  border-radius: 4px;
+  border-radius: 8px;
   z-index: 1000;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  animation: fadeOut 3s forwards;
-  animation-delay: 3s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Category Management Styles */
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.btn-primary:hover {
+  background-color: #1d4ed8;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: var(--paper-bg);
+  border: 1px solid var(--divider);
+  color: white;
+  font-size: 1rem;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
 }
 
 @keyframes fadeOut {
@@ -100,31 +138,33 @@ a {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-around;
-  background-color: var(--paper-bg);
-  padding: 12px 0;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-  z-index: 90;
-}
+/* Bottom navigation styles are now handled by JSX in BottomNavigation.js */
+@media (max-width: 600px) {
+  .fab {
+    bottom: 70px; /* Ensure FAB doesn't overlay bottom nav on mobile */
+  }
 
-.bottom-nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: var(--text);
-  opacity: 0.7;
-  transition: all 0.3s;
-}
+  .modal-content {
+    width: 95%;
+    padding: 16px;
+  }
 
-.bottom-nav-item.active {
-  opacity: 1;
-  color: var(--primary);
+  .form-group {
+    margin-bottom: 12px;
+  }
+
+  h2 {
+    font-size: 1.3rem;
+    margin-bottom: 16px;
+  }
+
+  .form-input {
+    padding: 10px;
+  }
+
+  .btn-primary, .btn-secondary {
+    padding: 10px 14px;
+  }
 }
 
 .modal-overlay {
@@ -150,53 +190,16 @@ a {
   padding: 24px;
 }
 
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-}
-
-.form-input {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 4px;
-  border: 1px solid var(--divider);
-  background-color: var(--surface);
-  color: var(--text);
-  font-size: 1rem;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--primary);
-}
-
-.btn {
-  padding: 10px 16px;
-  border-radius: 4px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.btn-primary {
-  background-color: var(--primary);
-  color: white;
-  border: none;
-}
-
-.btn-primary:hover {
-  background-color: #1d4ed8;
-}
 
 .btn-secondary {
   background-color: transparent;
   color: var(--text);
   border: 1px solid var(--divider);
+  padding: 10px 16px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
 }
 
 .btn-secondary:hover {
@@ -221,4 +224,72 @@ a {
 .toggle-item.active {
   background-color: var(--primary);
   color: white;
+}
+
+/* Placeholder for category management page styles (needs significant expansion) */
+#category-management {
+  padding: 20px;
+}
+
+#category-list {
+  list-style: none;
+  padding: 0;
+}
+
+#category-list li {
+  margin-bottom: 10px;
+}
+
+.credit-details {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--divider);
+}
+
+.settlement-options {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.btn-settlement {
+  background-color: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  flex: 1;
+  min-width: 120px;
+}
+
+.btn-settlement:hover {
+  background-color: #1e50c9;
+}
+
+.partial-settlement {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: var(--surface);
+  border-radius: 8px;
+}
+
+.settlement-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.strikethrough {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.settled {
+  opacity: 0.7;
 }
