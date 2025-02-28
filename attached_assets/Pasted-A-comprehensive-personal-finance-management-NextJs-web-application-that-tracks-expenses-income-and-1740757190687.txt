@@ -1,0 +1,25 @@
+A comprehensive personal finance management NextJs web application that tracks expenses, income, and manages both digital and physical wallet balances with detailed transaction logging and categorization.
+Core Features:
+	•	Dashboard showing total available money with separate balances for cash (physical wallet) and bank account (digital wallet)
+	•	Transaction management with:
+	◦	Expense logging with amount, purpose, and category
+	◦	Income recording with cash/digital distinction
+	◦	Credit tracking for money expected to return
+	◦	Recurring payment setup with automatic logging and cancellation options
+	•	Custom category management for expense organization
+	•	Detailed financial reports and spending analysis by category
+Visual References: Inspired by modern fintech apps like Mint and YNAB, known for their intuitive interfaces and comprehensive financial tracking capabilities.
+Style Guide:
+	•	Colors: Primary #2563EB (royal blue), Secondary #10B981 (emerald), Background #F9FAFB (off-white), Text #1F2937 (charcoal), Accent #6366F1 (indigo), Success #34D399 (green), Warning #F59E0B (amber)
+	•	Design: Inter/SF Pro Display fonts, modern card-based layout with floating action buttons, 16px base spacing, subtle shadows, responsive design with bottom navigation for mobile
+ make the app for only dark theme and use indian rupee symbols and the snackbar which says transaction created successfully should auto close in 3 seconds.
+also while adding the transactions the amount is by default 0 which should be blank and should have a toggler for cash and digital instead of select window.
+also after selecting type as credit there should come two options one as given and other as taken if given then deduct that amount from total and if taken add that amount to the total.
+and i should have a separate page where i can see all the transactions of type credit so that i get to know how much amount i owe to someone and how much is due on me.
+Make sure u use NextJs for application.
+And all the data of the transactions should be stored to the supabase tables whose sql is given below
+INSERT INTO "public"."categories" ("id", "name", "color", "icon") VALUES ('5', 'Udhaar ', '#10B981', 'gift'), ('6', 'Credit Card', '#10B981', 'home');
+
+INSERT INTO "public"."transactions" ("id", "amount", "description", "date", "type", "walletType", "categoryId", "isRecurring", "recurringInterval", "isSettled", "settledAmount") VALUES ('12', '20000', 'papa ne diye', '2025-02-28 07:58:06.67584+00', 'income', 'digital', '5', 'false', null, 'false', '0');
+
+i will explain you the app architecture which is like i have src folder inside which i have app folder inside which i have page.js which will be main page that is dashboard a layout.js file and other files you can use css also for creativity which i will store in styles folder with file name globals.css and then there will be a component folder where i can store various components
