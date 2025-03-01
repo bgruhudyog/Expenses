@@ -38,23 +38,32 @@ export default function TransactionModal({
       return;
     }
 
+    // Based on the SQL constraint error, we need to handle type differently
+    // Looking at index.tsx, it seems 'credit' is a derived concept - the transaction
+    // should actually be 'income' or 'expense' based on creditType
+    let actualType = type;
+    if (type === 'credit') {
+      // If it's credit given, it should be treated as an expense when recording
+      // If it's credit taken, it should be treated as income when recording
+      actualType = creditType ? 'expense' : 'income';
+    }
+    
     const newTransaction = {
       amount: parseFloat(amount),
       description,
       date: new Date().toISOString(),
-      type,
+      type: actualType, // Use the derived type
       walletType,
       categoryId: categoryId ? parseInt(categoryId) : null,
       isRecurring,
       recurringInterval: isRecurring ? recurringInterval : null,
       isSettled: false,
-      settledAmount: 0
+      settledAmount: 0,
+      // Always include creditType, which will be used to identify this as a credit transaction
+      creditType: type === 'credit' ? creditType : null
     };
-
-    // Only add creditType if the transaction type is credit
-    if (type === 'credit') {
-      newTransaction.creditType = creditType; // true for given, false for taken
-    }
+    
+    console.log("Adding transaction:", newTransaction);
 
     try {
       onAddTransaction(newTransaction);

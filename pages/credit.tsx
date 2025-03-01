@@ -38,7 +38,7 @@ const Credit: NextPage = () => {
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .eq('type', 'credit')
+        .not('creditType', 'is', null)  // Look for transactions where creditType is not null
         .order('date', { ascending: false });
       
       if (error) throw error;
@@ -85,30 +85,60 @@ const Credit: NextPage = () => {
     setTotalTaken(taken);
   };
 
-  const handleAddTransaction = async (newTransaction) => {
-    // Ensure it's a credit transaction
-    newTransaction.type = 'credit';
+  // Define Transaction interface
+  interface Transaction {
+    id?: number;
+    amount: number;
+    description: string;
+    date: string;
+    type: string;
+    walletType: string;
+    categoryId: number | null;
+    isRecurring: boolean;
+    recurringInterval: string | null;
+    isSettled: boolean;
+    settledAmount: number;
+    creditType: boolean | null;
+  }
+
+  const handleAddTransaction = async (newTransaction: Partial<Transaction>) => {
+    // Ensure it's properly marked as a credit transaction
+    // The actual type (income/expense) is already determined in the modal
+    // based on whether it's credit given or taken
+    const creditTransaction: Transaction = {
+      ...newTransaction as Transaction,
+      // Don't override the type here - use the one from the modal
+      // which should be either 'income' or 'expense' based on creditType
+      isSettled: false,
+      settledAmount: 0,
+    };
     
     try {
+      console.log('Adding credit transaction:', creditTransaction);
+      
       const { data, error } = await supabase
         .from('transactions')
-        .insert([newTransaction])
+        .insert([creditTransaction])
         .select();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
       
       const updatedTransactions = [data[0], ...transactions];
       setTransactions(updatedTransactions);
       calculateTotals(updatedTransactions);
       
       // Show snackbar
+      setSnackbarMessage('Credit transaction added successfully');
       setShowSnackbar(true);
       setTimeout(() => {
         setShowSnackbar(false);
       }, 3000);
     } catch (error) {
       console.error('Error adding transaction:', error);
-      alert('Failed to add transaction');
+      alert('Failed to add transaction: ' + (error.message || 'Unknown error'));
     }
   };
 
