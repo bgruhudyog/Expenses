@@ -159,7 +159,8 @@ const Reports: NextPage = () => {
       // Process transactions
       transactions.forEach(transaction => {
         const transactionDate = new Date(transaction.date);
-        const dayDiff = Math.floor((currentDate - transactionDate) / (1000 * 60 * 60 * 24));
+        const dayDiff = Math.floor((currentDate.getTime() - transactionDate.getTime()) / (1000 * 60 * 60 * 24));
+
         
         if (dayDiff >= 0 && dayDiff < 30) {
           const amount = parseFloat(transaction.amount);
