@@ -2,9 +2,16 @@
 import { useState, useEffect } from 'react';
 import type { NextPage } from 'next';
 import { format } from 'date-fns';
-import { MdAdd } from 'react-icons/md';
+import { MdAdd, MdWifiOff, MdCloudUpload } from 'react-icons/md';
 import supabase from '../lib/supabase';
 import TransactionModal from '../components/TransactionModal';
+import { 
+  storeOfflineTransaction,
+  getOfflineTransactions,
+  removeOfflineTransaction,
+  isOnline,
+  clearOfflineTransactions
+} from '../lib/offlineStorage';
 
 const Transactions: NextPage = () => {
   const [transactions, setTransactions] = useState([]);
@@ -58,7 +65,107 @@ const Transactions: NextPage = () => {
     }
   };
 
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [hasOfflineTransactions, setHasOfflineTransactions] = useState(false);
+
+  // Check online status
+  useEffect(() => {
+    // Initial check
+    setIsOfflineMode(!isOnline());
+    
+    // Check for existing offline transactions
+    const offlineTransactions = getOfflineTransactions();
+    setHasOfflineTransactions(offlineTransactions.length > 0);
+    
+    // Add to the displayed transactions
+    if (offlineTransactions.length > 0) {
+      setTransactions(prev => [...offlineTransactions, ...prev]);
+    }
+    
+    // Listen for online/offline events
+    const handleOnline = () => {
+      setIsOfflineMode(false);
+      showMessage('You are back online');
+      syncOfflineTransactions();
+    };
+    
+    const handleOffline = () => {
+      setIsOfflineMode(true);
+      showMessage('You are offline. Transactions will be saved locally.');
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+  // Function to sync offline transactions when back online
+  const syncOfflineTransactions = async () => {
+    const offlineTransactions = getOfflineTransactions();
+    
+    if (offlineTransactions.length === 0) return;
+    
+    showMessage(`Syncing ${offlineTransactions.length} offline transactions...`);
+    
+    for (const transaction of offlineTransactions) {
+      try {
+        // Remove offline specific properties
+        const { offlineId, isOffline, ...syncTransaction } = transaction;
+        
+        const { error } = await supabase
+          .from('transactions')
+          .insert([syncTransaction]);
+        
+        if (error) {
+          console.error('Error syncing transaction:', error);
+          continue;
+        }
+        
+        // Remove from offline storage once synced
+        removeOfflineTransaction(offlineId);
+      } catch (error) {
+        console.error('Error syncing transaction:', error);
+      }
+    }
+    
+    // Refresh transactions
+    fetchTransactions();
+    
+    // Check if all transactions are synced
+    const remainingOffline = getOfflineTransactions();
+    setHasOfflineTransactions(remainingOffline.length > 0);
+    
+    showMessage(
+      remainingOffline.length > 0
+        ? `Synced some transactions. ${remainingOffline.length} remaining.`
+        : 'All transactions synced successfully!'
+    );
+  };
+
   const handleAddTransaction = async (newTransaction) => {
+    // Check if online
+    if (!isOnline()) {
+      // Store offline
+      const offlineTransaction = storeOfflineTransaction(newTransaction);
+      
+      if (offlineTransaction) {
+        // Add to displayed transactions
+        setTransactions([offlineTransaction, ...transactions]);
+        setHasOfflineTransactions(true);
+        
+        // Show offline message
+        showMessage('Transaction saved offline');
+      } else {
+        alert('Failed to save transaction offline');
+      }
+      return;
+    }
+    
+    // Online flow
     try {
       const { data, error } = await supabase
         .from('transactions')
@@ -70,13 +177,20 @@ const Transactions: NextPage = () => {
       setTransactions([data[0], ...transactions]);
       
       // Show snackbar
-      setShowSnackbar(true);
-      setTimeout(() => {
-        setShowSnackbar(false);
-      }, 3000);
+      showMessage('Transaction added successfully');
     } catch (error) {
       console.error('Error adding transaction:', error);
-      alert('Failed to add transaction');
+      
+      // If there's an error with the online submission, save offline as fallback
+      const offlineTransaction = storeOfflineTransaction(newTransaction);
+      
+      if (offlineTransaction) {
+        setTransactions([offlineTransaction, ...transactions]);
+        setHasOfflineTransactions(true);
+        showMessage('Server error. Transaction saved offline.');
+      } else {
+        alert('Failed to add transaction');
+      }
     }
   };
 
@@ -187,7 +301,7 @@ const Transactions: NextPage = () => {
       <div className="transactions-list">
         {filteredTransactions.length > 0 ? (
           filteredTransactions.map((transaction) => (
-            <div key={transaction.id} className="card transaction-card">
+            <div key={transaction.id || transaction.offlineId} className={`card transaction-card ${transaction.isOffline ? 'offline-transaction' : ''}`}>
               <div className="transaction-header">
                 <div>
                   <h3 className="transaction-description">{transaction.description}</h3>
@@ -244,6 +358,20 @@ const Transactions: NextPage = () => {
         )}
       </div>
       
+      {isOfflineMode && (
+        <div className="offline-banner">
+          <MdWifiOff size={18} />
+          <span>You are offline. Transactions will be saved locally.</span>
+        </div>
+      )}
+      
+      {!isOfflineMode && hasOfflineTransactions && (
+        <div className="sync-banner" onClick={syncOfflineTransactions}>
+          <MdCloudUpload size={18} />
+          <span>Sync offline transactions</span>
+        </div>
+      )}
+
       <div className="fab" onClick={() => setIsModalOpen(true)}>
         <MdAdd size={24} />
       </div>
@@ -298,6 +426,21 @@ const Transactions: NextPage = () => {
         }
         .transaction-card {
           margin-bottom: 16px;
+          position: relative;
+        }
+        .offline-transaction {
+          border: 1px dashed #ff9800;
+        }
+        .offline-transaction::after {
+          content: 'Offline';
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          background-color: #ff9800;
+          color: black;
+          font-size: 0.6rem;
+          padding: 2px 6px;
+          border-radius: 4px;
         }
         .transaction-header {
           display: flex;
@@ -365,6 +508,36 @@ const Transactions: NextPage = () => {
           text-align: center;
           padding: 48px 0;
           color: rgba(255, 255, 255, 0.7);
+        }
+        .offline-banner {
+          position: fixed;
+          bottom: 80px;
+          left: 16px;
+          right: 16px;
+          background-color: #ff9800;
+          color: black;
+          padding: 10px 16px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          z-index: 10;
+        }
+        .sync-banner {
+          position: fixed;
+          bottom: 80px;
+          left: 16px;
+          right: 16px;
+          background-color: var(--primary);
+          color: white;
+          padding: 10px 16px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          z-index: 10;
+          cursor: pointer;
         }
       `}</style>
     </div>

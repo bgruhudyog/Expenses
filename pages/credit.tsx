@@ -2,9 +2,16 @@
 import { useState, useEffect } from 'react';
 import type { NextPage } from 'next';
 import { format } from 'date-fns';
-import { MdAdd } from 'react-icons/md';
+import { MdAdd, MdWifiOff, MdCloudUpload } from 'react-icons/md';
 import supabase from '../lib/supabase';
 import TransactionModal from '../components/TransactionModal';
+import { 
+  storeOfflineTransaction,
+  getOfflineTransactions,
+  removeOfflineTransaction,
+  isOnline,
+  clearOfflineTransactions
+} from '../lib/offlineStorage';
 
 const Credit: NextPage = () => {
   const [transactions, setTransactions] = useState([]);
@@ -101,18 +108,118 @@ const Credit: NextPage = () => {
     creditType: boolean | null;
   }
 
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [hasOfflineTransactions, setHasOfflineTransactions] = useState(false);
+
+  // Check online status
+  useEffect(() => {
+    // Initial check
+    setIsOfflineMode(!isOnline());
+    
+    // Check for existing offline transactions
+    const offlineTransactions = getOfflineTransactions().filter(t => t.creditType !== null);
+    setHasOfflineTransactions(offlineTransactions.length > 0);
+    
+    // Add to the displayed transactions
+    if (offlineTransactions.length > 0) {
+      const combined = [...offlineTransactions, ...transactions];
+      setTransactions(combined);
+      calculateTotals(combined);
+    }
+    
+    // Listen for online/offline events
+    const handleOnline = () => {
+      setIsOfflineMode(false);
+      showMessage('You are back online');
+      syncOfflineTransactions();
+    };
+    
+    const handleOffline = () => {
+      setIsOfflineMode(true);
+      showMessage('You are offline. Transactions will be saved locally.');
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+  // Function to sync offline transactions when back online
+  const syncOfflineTransactions = async () => {
+    const offlineTransactions = getOfflineTransactions().filter(t => t.creditType !== null);
+    
+    if (offlineTransactions.length === 0) return;
+    
+    showMessage(`Syncing ${offlineTransactions.length} offline credit transactions...`);
+    
+    for (const transaction of offlineTransactions) {
+      try {
+        // Remove offline specific properties
+        const { offlineId, isOffline, ...syncTransaction } = transaction;
+        
+        const { error } = await supabase
+          .from('transactions')
+          .insert([syncTransaction]);
+        
+        if (error) {
+          console.error('Error syncing credit transaction:', error);
+          continue;
+        }
+        
+        // Remove from offline storage once synced
+        removeOfflineTransaction(offlineId);
+      } catch (error) {
+        console.error('Error syncing credit transaction:', error);
+      }
+    }
+    
+    // Refresh transactions
+    fetchCreditTransactions();
+    
+    // Check if all transactions are synced
+    const remainingOffline = getOfflineTransactions().filter(t => t.creditType !== null);
+    setHasOfflineTransactions(remainingOffline.length > 0);
+    
+    showMessage(
+      remainingOffline.length > 0
+        ? `Synced some transactions. ${remainingOffline.length} remaining.`
+        : 'All credit transactions synced successfully!'
+    );
+  };
+
   const handleAddTransaction = async (newTransaction: Partial<Transaction>) => {
     // Ensure it's properly marked as a credit transaction
-    // The actual type (income/expense) is already determined in the modal
-    // based on whether it's credit given or taken
     const creditTransaction: Transaction = {
       ...newTransaction as Transaction,
-      // Don't override the type here - use the one from the modal
-      // which should be either 'income' or 'expense' based on creditType
       isSettled: false,
       settledAmount: 0,
     };
     
+    // Check if online
+    if (!isOnline()) {
+      // Store offline
+      const offlineTransaction = storeOfflineTransaction(creditTransaction);
+      
+      if (offlineTransaction) {
+        // Add to displayed transactions
+        const updatedTransactions = [offlineTransaction, ...transactions];
+        setTransactions(updatedTransactions);
+        calculateTotals(updatedTransactions);
+        setHasOfflineTransactions(true);
+        
+        // Show offline message
+        showMessage('Credit transaction saved offline');
+      } else {
+        alert('Failed to save credit transaction offline');
+      }
+      return;
+    }
+    
+    // Online flow
     try {
       console.log('Adding credit transaction:', creditTransaction);
       
@@ -131,14 +238,22 @@ const Credit: NextPage = () => {
       calculateTotals(updatedTransactions);
       
       // Show snackbar
-      setSnackbarMessage('Credit transaction added successfully');
-      setShowSnackbar(true);
-      setTimeout(() => {
-        setShowSnackbar(false);
-      }, 3000);
+      showMessage('Credit transaction added successfully');
     } catch (error) {
       console.error('Error adding transaction:', error);
-      alert('Failed to add transaction: ' + (error.message || 'Unknown error'));
+      
+      // If there's an error with the online submission, save offline as fallback
+      const offlineTransaction = storeOfflineTransaction(creditTransaction);
+      
+      if (offlineTransaction) {
+        const updatedTransactions = [offlineTransaction, ...transactions];
+        setTransactions(updatedTransactions);
+        calculateTotals(updatedTransactions);
+        setHasOfflineTransactions(true);
+        showMessage('Server error. Credit transaction saved offline.');
+      } else {
+        alert('Failed to add credit transaction: ' + (error.message || 'Unknown error'));
+      }
     }
   };
 
@@ -186,6 +301,7 @@ const Credit: NextPage = () => {
       const newTransaction = {
         date: new Date().toISOString(),
         walletType: transaction.walletType,
+        type: "",
         categoryId: transaction.categoryId,
         amount: parseFloat(settleAmount),
         description: transaction.creditType 
@@ -255,12 +371,22 @@ const Credit: NextPage = () => {
   // Month filter
   if (monthFilter) {
     filteredTransactions = filteredTransactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      const [year, month] = monthFilter.split('-');
-      return (
-        transactionDate.getFullYear() === parseInt(year) && 
-        transactionDate.getMonth() === parseInt(month) - 1
-      );
+      try {
+        const transactionDate = new Date(t.date);
+        const [year, month] = monthFilter.split('-');
+        
+        // Add logging to debug date parsing
+        console.log('Transaction date:', t.date, 'Parsed as:', transactionDate);
+        console.log('Filter:', year, month);
+        
+        return (
+          transactionDate.getFullYear() === parseInt(year) && 
+          transactionDate.getMonth() === parseInt(month) - 1
+        );
+      } catch (error) {
+        console.error('Error filtering by date:', error, t.date);
+        return false;
+      }
     });
   }
 
@@ -288,12 +414,28 @@ const Credit: NextPage = () => {
           className="search-input"
         />
         
-        <input
-          type="month"
-          value={monthFilter}
-          onChange={(e) => setMonthFilter(e.target.value)}
-          className="month-input"
-        />
+        <div className="month-filter-container">
+          <label htmlFor="month-filter" className="month-label">Filter by month:</label>
+          <input
+            id="month-filter"
+            type="month"
+            value={monthFilter}
+            onChange={(e) => {
+              console.log('Selected month:', e.target.value);
+              setMonthFilter(e.target.value);
+            }}
+            className="month-input"
+          />
+          {monthFilter && (
+            <button 
+              className="clear-filter" 
+              onClick={() => setMonthFilter('')}
+              title="Clear filter"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
       
       <div className="filters">
@@ -320,7 +462,7 @@ const Credit: NextPage = () => {
       <div className="credit-list">
         {filteredTransactions.length > 0 ? (
           filteredTransactions.map((transaction) => (
-            <div key={transaction.id} className={`card credit-card ${transaction.isSettled ? 'settled' : ''}`}>
+            <div key={transaction.id || transaction.offlineId} className={`card credit-card ${transaction.isSettled ? 'settled' : ''} ${transaction.isOffline ? 'offline-transaction' : ''}`}>
               <div className="credit-header">
                 <div>
                   <h3 className={`credit-description ${transaction.isSettled ? 'strikethrough' : ''}`}>
@@ -438,6 +580,20 @@ const Credit: NextPage = () => {
         )}
       </div>
       
+      {isOfflineMode && (
+        <div className="offline-banner">
+          <MdWifiOff size={18} />
+          <span>You are offline. Credit transactions will be saved locally.</span>
+        </div>
+      )}
+      
+      {!isOfflineMode && hasOfflineTransactions && (
+        <div className="sync-banner" onClick={syncOfflineTransactions}>
+          <MdCloudUpload size={18} />
+          <span>Sync offline credit transactions</span>
+        </div>
+      )}
+
       <div className="fab" onClick={() => setIsModalOpen(true)}>
         <MdAdd size={24} />
       </div>
@@ -461,13 +617,50 @@ const Credit: NextPage = () => {
           gap: 10px;
           margin-bottom: 16px;
         }
-        .search-input, .month-input {
+        .search-input {
           flex: 1;
           padding: 10px 12px;
           border-radius: 8px;
           border: 1px solid var(--divider);
           background-color: var(--paper-bg);
           color: white;
+        }
+        .month-filter-container {
+          display: flex;
+          flex-direction: column;
+          position: relative;
+          width: 40%;
+        }
+        .month-label {
+          font-size: 0.8rem;
+          margin-bottom: 4px;
+          color: rgba(255, 255, 255, 0.7);
+        }
+        .month-input {
+          padding: 10px 12px;
+          border-radius: 8px;
+          border: 1px solid var(--divider);
+          background-color: var(--paper-bg);
+          color: white;
+        }
+        .clear-filter {
+          position: absolute;
+          right: 10px;
+          top: 32px;
+          background: none;
+          border: none;
+          color: white;
+          font-size: 18px;
+          cursor: pointer;
+          height: 20px;
+          width: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+        }
+        .clear-filter:hover {
+          background-color: rgba(255, 255, 255, 0.1);
         }
         .summaries {
           display: grid;
@@ -512,6 +705,21 @@ const Credit: NextPage = () => {
         }
         .credit-card {
           margin-bottom: 16px;
+          position: relative;
+        }
+        .offline-transaction {
+          border: 1px dashed #ff9800;
+        }
+        .offline-transaction::after {
+          content: 'Offline';
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          background-color: #ff9800;
+          color: black;
+          font-size: 0.6rem;
+          padding: 2px 6px;
+          border-radius: 4px;
         }
         .credit-header {
           display: flex;
@@ -576,6 +784,36 @@ const Credit: NextPage = () => {
           text-align: center;
           padding: 48px 0;
           color: rgba(255, 255, 255, 0.7);
+        }
+        .offline-banner {
+          position: fixed;
+          bottom: 80px;
+          left: 16px;
+          right: 16px;
+          background-color: #ff9800;
+          color: black;
+          padding: 10px 16px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          z-index: 10;
+        }
+        .sync-banner {
+          position: fixed;
+          bottom: 80px;
+          left: 16px;
+          right: 16px;
+          background-color: var(--primary);
+          color: white;
+          padding: 10px 16px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          z-index: 10;
+          cursor: pointer;
         }
       `}</style>
     </div>
