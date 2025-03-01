@@ -6,9 +6,10 @@ import supabase from '../lib/supabase';
 
 const Categories: NextPage = () => {
   const [categories, setCategories] = useState([]);
-  const [newCategory, setNewCategory] = useState({ name: '', color: '#2563EB', icon: 'tag' });
+  const [newCategory, setNewCategory] = useState({ name: '', icon: '💰' });
   const [showSnackbar, setShowSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -54,7 +55,7 @@ const Categories: NextPage = () => {
       if (error) throw error;
       
       setCategories([...categories, data[0]]);
-      setNewCategory({ name: '', color: '#2563EB', icon: 'tag' });
+      setNewCategory({ name: '', icon: '💰' });
       showMessage('Category created successfully');
     } catch (error) {
       console.error('Error creating category:', error);
@@ -83,10 +84,13 @@ const Categories: NextPage = () => {
     }
   };
 
-  const iconOptions = [
-    'tag', 'home', 'shopping-cart', 'food', 'car', 
-    'gift', 'health', 'entertainment', 'education', 
-    'travel', 'utility', 'phone', 'clothing', 'pet', 'other'
+  // Common emoji categories for finance
+  const emojis = [
+    '💰', '💵', '💸', '💳', '💴', '🏦', '🏠', '🚗', 
+    '🛒', '🍔', '☕', '🍕', '🎮', '📱', '💊', '🛌', 
+    '✈️', '🏨', '📚', '🎓', '🏥', '💼', '👕', '👟', 
+    '💇', '🎭', '🎬', '🎟️', '🎁', '🏋️', '🐶', '🐱',
+    '👶', '💍', '⚙️', '📝', '📊', '🧾', '🧹', '🚌'
   ];
 
   return (
@@ -110,31 +114,33 @@ const Categories: NextPage = () => {
           </div>
           
           <div className="form-group">
-            <label className="form-label" htmlFor="categoryColor">Category Color</label>
-            <div className="color-input-wrapper">
-              <input 
-                type="color" 
-                id="categoryColor"
-                className="color-input" 
-                value={newCategory.color} 
-                onChange={(e) => setNewCategory({...newCategory, color: e.target.value})}
-              />
-              <span className="color-preview" style={{ backgroundColor: newCategory.color }}></span>
+            <label className="form-label">Category Icon</label>
+            <div className="emoji-selector">
+              <div 
+                className="selected-emoji"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              >
+                <span className="emoji">{newCategory.icon}</span>
+                <span className="emoji-hint">Click to select emoji</span>
+              </div>
+              
+              {showEmojiPicker && (
+                <div className="emoji-picker">
+                  {emojis.map(emoji => (
+                    <div 
+                      key={emoji} 
+                      className={`emoji-item ${newCategory.icon === emoji ? 'selected' : ''}`}
+                      onClick={() => {
+                        setNewCategory({...newCategory, icon: emoji});
+                        setShowEmojiPicker(false);
+                      }}
+                    >
+                      {emoji}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-          
-          <div className="form-group">
-            <label className="form-label" htmlFor="categoryIcon">Category Icon</label>
-            <select 
-              id="categoryIcon"
-              className="form-input" 
-              value={newCategory.icon} 
-              onChange={(e) => setNewCategory({...newCategory, icon: e.target.value})}
-            >
-              {iconOptions.map(icon => (
-                <option key={icon} value={icon}>{icon}</option>
-              ))}
-            </select>
           </div>
           
           <button type="submit" className="btn btn-primary">
@@ -149,10 +155,9 @@ const Categories: NextPage = () => {
         {categories.length > 0 ? (
           categories.map(category => (
             <div key={category.id} className="category-item">
-              <div className="category-color" style={{ backgroundColor: category.color }}></div>
+              <div className="category-icon">{category.icon}</div>
               <div className="category-info">
                 <h3>{category.name}</h3>
-                <span className="category-icon">Icon: {category.icon}</span>
               </div>
               <button 
                 className="delete-btn"
@@ -184,22 +189,59 @@ const Categories: NextPage = () => {
           flex-direction: column;
           gap: 16px;
         }
-        .color-input-wrapper {
+        .emoji-selector {
+          position: relative;
+        }
+        .selected-emoji {
           display: flex;
           align-items: center;
           gap: 12px;
-        }
-        .color-input {
-          width: 100px;
-          height: 40px;
-          border: none;
-          background: none;
+          padding: 12px;
+          border-radius: 8px;
+          border: 1px solid var(--divider);
+          background-color: var(--paper-bg);
           cursor: pointer;
         }
-        .color-preview {
-          width: 40px;
-          height: 40px;
+        .emoji {
+          font-size: 1.5rem;
+        }
+        .emoji-hint {
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 0.8rem;
+        }
+        .emoji-picker {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          background-color: var(--surface);
           border-radius: 8px;
+          border: 1px solid var(--divider);
+          padding: 12px;
+          margin-top: 8px;
+          display: grid;
+          grid-template-columns: repeat(8, 1fr);
+          gap: 8px;
+          max-height: 200px;
+          overflow-y: auto;
+          z-index: 10;
+        }
+        .emoji-item {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.2rem;
+          width: 36px;
+          height: 36px;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: background-color 0.2s;
+        }
+        .emoji-item:hover {
+          background-color: rgba(255, 255, 255, 0.1);
+        }
+        .emoji-item.selected {
+          background-color: var(--primary);
         }
         .categories-list {
           margin-top: 32px;
@@ -212,13 +254,23 @@ const Categories: NextPage = () => {
           background-color: var(--paper-bg);
           border-radius: 8px;
           margin-bottom: 12px;
+          transition: transform 0.2s, box-shadow 0.2s;
         }
-        .category-color {
+        .category-item:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .category-icon {
           width: 40px;
           height: 40px;
           border-radius: 8px;
           margin-right: 16px;
           flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.5rem;
+          background-color: var(--surface);
         }
         .category-info {
           flex-grow: 1;
@@ -226,10 +278,6 @@ const Categories: NextPage = () => {
         .category-info h3 {
           margin: 0;
           margin-bottom: 4px;
-        }
-        .category-icon {
-          font-size: 0.8rem;
-          color: rgba(255, 255, 255, 0.7);
         }
         .delete-btn {
           background-color: transparent;
@@ -241,6 +289,7 @@ const Categories: NextPage = () => {
           display: flex;
           align-items: center;
           justify-content: center;
+          transition: background-color 0.2s;
         }
         .delete-btn:hover {
           background-color: rgba(239, 68, 68, 0.1);
